@@ -194,6 +194,14 @@ input[type=range]{width:100%;accent-color:var(--blue);padding:0;border:0;backgro
     </div>
 
     <div class="sec">
+      <div class="sec-t">Live sync to OBS</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--mute);margin-bottom:8px"><span id="syncDot" style="width:9px;height:9px;border-radius:50%;background:#555;flex:none"></span><span id="syncTxt">Connecting…</span></div>
+      <div class="btns"><button class="btn primary" id="obsLinkBtn">Copy OBS link</button><button class="btn" id="ctlLinkBtn">Copy phone link</button></div>
+      <input id="linkOut" readonly style="display:none;width:100%;margin-top:8px;background:#0d0d0d;border:1px solid var(--line);border-radius:8px;color:var(--text);font:500 12px Inter,sans-serif;padding:8px 10px">
+      <p class="hint" style="margin:10px 0 0">Paste the OBS link into your browser source once. After that, anything you change here shows up on the OBS slide.</p>
+    </div>
+
+    <div class="sec">
       <div class="sec-t">Logo</div>
       <div class="btns">
         <label class="btn" style="text-align:center">Upload logo<input id="logoFile" type="file" accept="image/*" hidden></label>
@@ -256,7 +264,7 @@ const DEFAULTS = { practice:'Your Practice', proc:'full-arch case', fee:25000, m
 
 let s = Object.assign({}, DEFAULTS);
 try { const saved = JSON.parse(localStorage.getItem(KEY) || 'null'); if (saved) s = Object.assign(s, saved); } catch(e){}
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e){} };
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e){} if (window.__pub) window.__pub(); };
 
 /* ---------- formatting ---------- */
 const money = v => (v < 0 ? '−' : '') + '$' + Math.round(Math.abs(v)).toLocaleString('en-US');
@@ -479,7 +487,64 @@ new ResizeObserver(fit).observe($('view'));
 const qp = new URLSearchParams(location.search);
 if (qp.has('present')) $('app').classList.add('present');
 if (qp.has('obs')) $('app').classList.add('obs');
+['practice','proc'].forEach(k => { if (qp.has(k)) s[k] = qp.get(k); });
+['fee','margin','total','term','cases'].forEach(k => { if (qp.has(k) && isFinite(+qp.get(k))) s[k] = +qp.get(k); });
+if (qp.has('total') || qp.has('term')) s.preset = 'custom';
+if (qp.has('total') && qp.has('term')) { for (const [k,v] of Object.entries(PRESETS)) if (v.total === s.total && v.term === s.term) s.preset = k; }
+syncInputs();
 if (qp.get('slide')) s.slide = Math.min(4, Math.max(1, +qp.get('slide') || 1));
+
+/* ---------- live sync (ntfy.sh relay) ---------- */
+(function(){
+  const SYNC_KEYS = ['practice','proc','fee','margin','preset','total','term','cases','slide'];
+  const ID = Math.random().toString(36).slice(2, 10);
+  let room = qp.get('room');
+  try { if (!room) room = localStorage.getItem('roiviz:room'); } catch(e){}
+  if (!room) room = '1light-roi-' + Array.from(crypto.getRandomValues(new Uint8Array(8)), b => (b % 36).toString(36)).join('');
+  try { localStorage.setItem('roiviz:room', room); } catch(e){}
+  const BASE = 'https://ntfy.sh/' + encodeURIComponent(room);
+  let applying = false, ready = false, timer = null, last = '';
+  const status = (ok, txt) => { $('syncDot').style.background = ok ? '#2ecc71' : '#e5a33a'; $('syncTxt').textContent = txt; };
+  const snap = () => { const o = {}; SYNC_KEYS.forEach(k => o[k] = s[k]); return o; };
+  function apply(o){
+    if (!o || typeof o !== 'object') return;
+    applying = true;
+    SYNC_KEYS.forEach(k => { if (k in o) s[k] = (typeof DEFAULTS[k] === 'number') ? +o[k] : String(o[k]); });
+    syncInputs(); render();
+    applying = false;
+  }
+  window.__pub = () => {
+    if (applying || !ready) return;
+    const body = JSON.stringify({ from: ID, s: snap() });
+    if (body === last) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      last = body;
+      fetch(BASE, { method: 'POST', body }).then(r => { if (!r.ok) throw 0; status(true, 'Live: changes go to OBS'); })
+        .catch(() => status(false, 'Sync paused (relay busy). Retrying on next change.'));
+    }, 700);
+  };
+  const handle = raw => { try { const m = JSON.parse(raw); if (m && m.from !== ID) apply(m.s); } catch(e){} };
+  // pick up the latest state, then listen
+  fetch(BASE + '/json?poll=1&since=12h').then(r => r.text()).then(t => {
+    const lines = t.trim().split('\n').filter(Boolean); 
+    if (lines.length && !qp.has('fee')) { try { handle(JSON.parse(lines[lines.length - 1]).message); } catch(e){} }
+  }).catch(() => {}).finally(() => { ready = true; });
+  try {
+    const es = new EventSource(BASE + '/sse');
+    es.onopen = () => status(true, 'Live: connected');
+    es.onerror = () => status(false, 'Reconnecting…');
+    es.onmessage = e => { try { const d = JSON.parse(e.data); if (d.event === 'message') handle(d.message); } catch(err){} };
+  } catch(e) { status(false, 'Live sync unavailable in this browser'); }
+  const link = (present) => location.origin + location.pathname + '?' + (present ? 'present&' : '') + 'room=' + encodeURIComponent(room);
+  const copy = (btn, url, label) => {
+    const out = $('linkOut'); out.style.display = 'block'; out.value = url; out.select();
+    const done = () => { const t = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => btn.textContent = label, 1800); };
+    try { navigator.clipboard.writeText(url).then(done, () => { try { document.execCommand('copy') && done(); } catch(e){} }); } catch(e) { try { document.execCommand('copy') && done(); } catch(e2){} }
+  };
+  $('obsLinkBtn').addEventListener('click', e => copy(e.currentTarget, link(true), 'Copy OBS link'));
+  $('ctlLinkBtn').addEventListener('click', e => copy(e.currentTarget, link(false), 'Copy phone link'));
+})();
 syncInputs(); renderLogo(); render(); fit();
 })();
 </script>
