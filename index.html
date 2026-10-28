@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Content ROI Visualizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#111111; --panel:#161616; --line:#2a2a2a; --text:#F8F6F2; --mute:#888888;
+  --blue:#00BFFF; --blue2:#7ED8F6; --blueDim:#0b2a35; --red:#ff5a5f;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#000;color:var(--text);font-family:Inter,system-ui,sans-serif}
+.app{display:flex;height:100vh}
+
+/* ---------- Control panel ---------- */
+.panel{width:340px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:22px 20px 40px}
+.present .panel{display:none}
+.obs .view{justify-content:flex-start;align-items:flex-start}
+.panel h2{font:800 18px Inter,sans-serif;letter-spacing:.02em;margin:0 0 4px}
+.panel .hint{color:var(--mute);font-size:12.5px;line-height:1.45;margin:0 0 18px}
+.sec{border-top:1px solid var(--line);padding-top:16px;margin-top:16px}
+.sec-t{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--blue2);margin-bottom:10px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--mute);margin-bottom:5px}
+.field input,.field select{width:100%;background:#0d0d0d;border:1px solid var(--line);border-radius:8px;color:var(--text);font:500 16px Inter,sans-serif;padding:10px 12px;outline:none}
+.field input:focus,.field select:focus{border-color:var(--blue)}
+.row{display:flex;gap:10px}.row .field{flex:1}
+.prefix{position:relative}.prefix span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--mute);font-size:15px;pointer-events:none}
+.prefix input{padding-left:24px}
+.suffix{position:relative}.suffix span{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--mute);font-size:15px;pointer-events:none}
+input[type=range]{width:100%;accent-color:var(--blue);padding:0;border:0;background:none}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tabs button,.btn{flex:1;background:#0d0d0d;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:10px 8px;font:600 13px Inter,sans-serif;cursor:pointer}
+.tabs button.on{background:var(--blue);border-color:var(--blue)}
+.btn.primary{background:var(--blue);border-color:var(--blue)}
+.btns{display:flex;gap:8px;margin-top:8px}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mute);margin-top:10px;cursor:pointer}
+.keys{font-size:12px;color:var(--mute);line-height:1.7;margin-top:12px}
+.keys kbd{background:#222;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font:600 11px Inter,sans-serif;color:var(--text)}
+
+/* ---------- Stage ---------- */
+.view{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000}
+#wrap{position:relative}
+#stage{position:absolute;top:0;left:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;
+  background:
+    radial-gradient(1200px 700px at 88% -10%, rgba(0,191,255,.13), transparent 60%),
+    radial-gradient(900px 600px at -10% 110%, rgba(0,191,255,.06), transparent 60%),
+    var(--bg);}
+#stage::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:80px 80px;mask-image:radial-gradient(ellipse at 60% 40%,#000 20%,transparent 75%)}
+.slide{position:absolute;inset:0;opacity:0;transition:opacity .45s ease;pointer-events:none}
+.slide.on{opacity:1}
+.abs{position:absolute}
+.eyebrow{left:120px;top:96px;font:600 26px Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--blue2)}
+.eyebrow::before{content:"";display:inline-block;width:44px;height:3px;background:var(--blue);vertical-align:middle;margin-right:18px;transform:translateY(-3px)}
+.head{font:800 96px/1.02 Inter,sans-serif;letter-spacing:-.025em;margin:0}
+.head em{font-style:normal;color:var(--blue)}
+.n{font-variant-numeric:tabular-nums}
+
+/* bug + camera corner */
+.bug{right:120px;top:84px;height:56px;display:flex;align-items:center;opacity:.9}
+.corner{left:1440px;top:640px;width:420px;height:380px;display:flex;align-items:center;justify-content:center}
+.corner.guide{outline:3px dashed rgba(134,182,255,.35);outline-offset:-3px;border-radius:28px}
+.wm{font:900 44px Inter,sans-serif;letter-spacing:.04em;color:#fff}
+.wm b{color:var(--blue)}
+.bug .wm{font-size:30px}
+.logo-img{max-width:100%;max-height:100%;object-fit:contain}
+.bug .logo-img{height:56px;width:auto}
+.corner .logo-img{max-width:150px;max-height:150px}
+.corner .disc{width:280px;height:280px;border-radius:50%;background:#1A1A1A;border:2px solid #2a2a2a;display:flex;align-items:center;justify-content:center}
+
+/* slide 1 */
+.grid{left:1290px;top:210px;width:520px;display:grid;gap:14px}
+.tile{position:relative;aspect-ratio:1;border-radius:16px;background:#181818;border:2px solid #2a2a2a;overflow:hidden}
+.tile .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(135deg,#33CCFF,#00A6E0);transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.tile .lab{position:absolute;left:14px;bottom:10px;font:700 18px Inter,sans-serif;color:rgba(255,255,255,.75)}
+.gridcap{left:1290px;width:520px;font:500 22px Inter,sans-serif;color:var(--mute)}
+.gridcap b{color:var(--blue2)}
+.math{left:120px;top:800px;display:flex;align-items:flex-end;gap:26px}
+.math .v{font:800 48px Inter,sans-serif;letter-spacing:-.01em}
+.math .l{font:500 18px Inter,sans-serif;color:var(--mute);text-transform:uppercase;letter-spacing:.1em;margin-top:6px}
+.math .op{font:500 44px Inter,sans-serif;color:#4a4a4a;padding-bottom:30px}
+.math .hi .v{color:var(--blue)}
+
+/* slide 2 chart */
+.chart{left:120px;top:440px;width:1200px;height:470px}
+.bars{position:absolute;inset:0;display:flex;align-items:flex-end;gap:14px;border-bottom:2px solid #333}
+.bar{flex:1;position:relative;height:100%;display:flex;align-items:flex-end}
+.bar .bf{width:100%;height:0;border-radius:10px 10px 0 0;background:linear-gradient(180deg,#1e4a5a,#13303b);transition:height .7s cubic-bezier(.2,.8,.2,1),background .4s}
+.bar.over .bf{background:linear-gradient(180deg,#4DD2FF,#00A6E0)}
+.bar .bv{position:absolute;left:50%;transform:translateX(-50%);z-index:3;background:var(--bg);padding:1px 8px;border-radius:6px;font:700 19px Inter,sans-serif;color:var(--mute);white-space:nowrap;transition:bottom .7s cubic-bezier(.2,.8,.2,1)}
+.bar.over .bv{color:#fff}
+.bar .bl{position:absolute;left:50%;transform:translateX(-50%);bottom:-40px;font:600 18px Inter,sans-serif;color:var(--mute)}
+.bar.be .bl{color:var(--blue2)}
+.bar.be::after{content:"BREAK-EVEN";position:absolute;left:50%;transform:translateX(-50%);bottom:-74px;font:800 15px Inter,sans-serif;letter-spacing:.12em;color:var(--blue2);white-space:nowrap}
+.inv{position:absolute;left:-10px;right:-10px;height:0;border-top:3px dashed #ffffff;transition:bottom .7s cubic-bezier(.2,.8,.2,1);z-index:2}
+.inv span{position:absolute;left:calc(100% + 12px);bottom:-16px;color:#fff;font:700 19px Inter,sans-serif;background:var(--bg);padding:2px 10px;border-radius:6px;white-space:nowrap}
+.stats{left:1460px;top:440px;width:400px}
+.stat{margin-bottom:34px}
+.stat .l{font:600 18px Inter,sans-serif;color:var(--mute);text-transform:uppercase;letter-spacing:.1em}
+.stat .v{font:800 58px Inter,sans-serif;letter-spacing:-.015em;margin-top:6px}
+.stat.hi .v{color:var(--blue)}
+
+/* slide 3 */
+.tiles{left:120px;top:470px;width:1200px;display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.card{background:linear-gradient(160deg,#1a1a1a,#141414);border:2px solid #2a2a2a;border-radius:22px;padding:30px 34px;height:200px;display:flex;flex-direction:column;justify-content:space-between}
+.card .l{font:600 19px Inter,sans-serif;color:var(--mute);text-transform:uppercase;letter-spacing:.1em}
+.card .v{font:800 70px Inter,sans-serif;letter-spacing:-.02em}
+.card .s{font:500 20px Inter,sans-serif;color:var(--mute)}
+.card.hi{border-color:var(--blue);background:linear-gradient(160deg,#0c3a4a,#0a2530)}
+.card .v.neg{color:var(--red)}
+.roi{left:1400px;top:210px;width:420px;text-align:left}
+.roi .l{font:600 20px Inter,sans-serif;color:var(--mute);text-transform:uppercase;letter-spacing:.12em}
+.roi .v{font:900 200px/1 Inter,sans-serif;letter-spacing:-.04em;color:var(--blue);margin:10px 0 8px}
+.roi .s{font:500 24px Inter,sans-serif;color:var(--mute);line-height:1.35}
+
+/* slide 4 scenarios */
+.sc{left:120px;top:400px;width:1200px;height:440px}
+.sc .cols{position:absolute;inset:0;display:flex;align-items:flex-end;gap:28px;border-bottom:2px solid #333}
+.sc .col{flex:1;position:relative;height:100%;display:flex;align-items:flex-end}
+.sc .cf{width:100%;height:0;border-radius:12px 12px 0 0;background:linear-gradient(180deg,#1e4a5a,#13303b);transition:height .7s cubic-bezier(.2,.8,.2,1)}
+.sc .col.over .cf{background:linear-gradient(180deg,#4DD2FF,#00A6E0)}
+.sc .col.sel .cf{box-shadow:0 0 0 4px #F8F6F2}
+.sc .top{position:absolute;left:0;right:0;text-align:center;transition:bottom .7s cubic-bezier(.2,.8,.2,1)}
+.sc .roasv{font:900 64px/1 Inter,sans-serif;letter-spacing:-.03em;color:var(--blue)}
+.sc .col:not(.over) .roasv{color:var(--mute)}
+.sc .netv{font:600 20px Inter,sans-serif;color:var(--text);margin-top:6px}
+.sc .bot{position:absolute;left:0;right:0;bottom:-74px;text-align:center}
+.sc .bot b{display:block;font:800 26px Inter,sans-serif;color:var(--text)}
+.sc .bot span{font:600 15px Inter,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.sc .col.sel .bot b{color:var(--blue)}
+.sc .inv{z-index:0}
+.side4{left:1420px;top:400px;width:400px}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="panel">
+    <h2>Content ROI Visualizer</h2>
+    <p class="hint">Type the practice's numbers. The slide updates live. Press <b>P</b> to hide this panel before you screen-cap.</p>
+
+    <div class="sec-t">Practice</div>
+    <div class="field"><label>Practice name</label><input id="practice" type="text"></div>
+    <div class="field"><label>Procedure (singular)</label><input id="proc" type="text"></div>
+
+    <div class="sec">
+      <div class="sec-t">Their numbers</div>
+      <div class="row">
+        <div class="field"><label>Avg case fee</label><div class="prefix"><span>$</span><input id="fee" type="number" min="0" step="500"></div></div>
+        <div class="field"><label>Profit margin</label><div class="suffix"><input id="margin" type="number" min="0" max="100" step="1"><span>%</span></div></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t">The program</div>
+      <div class="field"><label>Plan</label>
+        <select id="preset">
+          <option value="growth">Growth · 6 months</option>
+          <option value="authority">Authority · 12 months</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="row">
+        <div class="field"><label>Total investment</label><div class="prefix"><span>$</span><input id="total" type="number" min="0" step="1000"></div></div>
+        <div class="field"><label>Term (months)</label><input id="term" type="number" min="1" max="24" step="1"></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t">Scenario</div>
+      <div class="field"><label>New cases per month from content: <b id="casesOut"></b></label>
+        <input id="cases" type="range" min="0" max="6" step="0.5">
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t">Slide</div>
+      <div class="tabs" id="tabs">
+        <button data-s="1">1 · One case</button>
+        <button data-s="2">2 · Payback</button>
+        <button data-s="3">3 · Return</button>
+        <button data-s="4">4 · Scenarios</button>
+      </div>
+      <div class="btns">
+        <button class="btn primary" id="presentBtn">Present (P)</button>
+        <button class="btn" id="resetBtn">Reset</button>
+      </div>
+      <label class="check"><input type="checkbox" id="guide"> Show camera-safe corner</label>
+      <div class="keys"><kbd>1</kbd>–<kbd>4</kbd> or <kbd>←</kbd> <kbd>→</kbd> switch slides · <kbd>↑</kbd> <kbd>↓</kbd> change cases/mo · <kbd>P</kbd> / <kbd>Esc</kbd> toggle panel</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t">Logo</div>
+      <div class="btns">
+        <label class="btn" style="text-align:center">Upload logo<input id="logoFile" type="file" accept="image/*" hidden></label>
+        <button class="btn" id="logoClear">Use 1Light logo</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="view" id="view">
+    <div id="wrap">
+      <div id="stage">
+        <div class="abs bug" id="bug"></div>
+
+        <!-- Slide 1 -->
+        <section class="slide" id="s1">
+          <div class="abs eyebrow" id="s1-eye"></div>
+          <h1 class="abs head" id="s1-head" style="left:120px;top:210px;width:1080px"></h1>
+          <div class="abs grid" id="s1-grid"></div>
+          <div class="abs gridcap" id="s1-cap"></div>
+          <div class="abs math" id="s1-math"></div>
+        </section>
+
+        <!-- Slide 2 -->
+        <section class="slide" id="s2">
+          <div class="abs eyebrow" id="s2-eye"></div>
+          <h1 class="abs head" id="s2-head" style="left:120px;top:190px;width:1680px;font-size:80px"></h1>
+          <div class="abs chart"><div class="bars" id="s2-bars"></div><div class="inv" id="s2-inv"><span id="s2-invlab"></span></div></div>
+          <div class="abs stats" id="s2-stats"></div>
+        </section>
+
+        <!-- Slide 3 -->
+        <section class="slide" id="s3">
+          <div class="abs eyebrow" id="s3-eye"></div>
+          <h1 class="abs head" id="s3-head" style="left:120px;top:210px;width:1160px;font-size:88px"></h1>
+          <div class="abs tiles" id="s3-tiles"></div>
+          <div class="abs roi" id="s3-roi"></div>
+        </section>
+
+
+        <!-- Slide 4 -->
+        <section class="slide" id="s4">
+          <div class="abs eyebrow" id="s4-eye"></div>
+          <h1 class="abs head" id="s4-head" style="left:120px;top:190px;width:1680px;font-size:80px"></h1>
+          <div class="abs sc"><div class="cols" id="s4-cols"></div><div class="inv" id="s4-inv"><span id="s4-invlab"></span></div></div>
+          <div class="abs stats side4" id="s4-side"></div>
+        </section>
+
+        <div class="abs corner" id="corner"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function(){
+const $ = id => document.getElementById(id);
+const KEY = 'roiviz:v1', LOGO = 'roiviz:logo';
+const PRESETS = { growth:{total:32000,term:6}, authority:{total:60000,term:12} };
+const DEFAULTS = { practice:'Your Practice', proc:'full-arch case', fee:25000, margin:50, preset:'growth', total:32000, term:6, cases:1, slide:1, guide:false };
+
+let s = Object.assign({}, DEFAULTS);
+try { const saved = JSON.parse(localStorage.getItem(KEY) || 'null'); if (saved) s = Object.assign(s, saved); } catch(e){}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e){} };
+
+/* ---------- formatting ---------- */
+const money = v => (v < 0 ? '−' : '') + '$' + Math.round(Math.abs(v)).toLocaleString('en-US');
+const moneyK = v => { const a = Math.abs(v); const t = a >= 1e6 ? (a/1e6).toFixed(1).replace(/\.0$/,'') + 'M' : a >= 1000 ? (a/1000).toFixed(a >= 100000 ? 0 : 1).replace(/\.0$/,'') + 'K' : Math.round(a); return (v<0?'−':'') + '$' + t; };
+const FMT = {
+  money, moneyK,
+  mo: v => v >= 10 ? Math.round(v).toString() : v.toFixed(1).replace(/\.0$/,''),
+  int: v => Math.round(v).toString(),
+  x: v => (v >= 10 ? Math.round(v) : v.toFixed(1)) + 'x',
+  pct: v => Math.round(v) + '%'
+};
+const casesTxt = c => Number.isInteger(c) ? String(c) : c.toFixed(1);
+const plural = (p, n) => n === 1 ? p : (/s$/i.test(p) ? p : p + 's');
+const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num = (key, v, f) => `<span class="n" data-key="${key}" data-v="${v}" data-f="${f}">${FMT[f](v)}</span>`;
+
+/* ---------- count-up animation ---------- */
+const prev = {};
+function animateNums(root){
+  root.querySelectorAll('[data-key]').forEach(el => {
+    const key = el.dataset.key, to = +el.dataset.v, f = FMT[el.dataset.f];
+    const from = (key in prev) ? prev[key] : to; prev[key] = to;
+    if (from === to || !isFinite(from) || !isFinite(to)) { el.textContent = f(to); return; }
+    const t0 = performance.now(), dur = 650;
+    (function step(t){
+      const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = f(from + (to - from) * e);
+      if (k < 1) requestAnimationFrame(step);
+    })(t0);
+  });
+}
+
+/* ---------- math ---------- */
+function calc(){
+  const ppc = s.fee * s.margin / 100;
+  const monthly = s.term > 0 ? s.total / s.term : 0;
+  const covered = monthly > 0 ? ppc / monthly : 0;
+  const casesBE = ppc > 0 ? Math.ceil(s.total / ppc - 1e-9) : Infinity;
+  const perMonth = s.cases * ppc;
+  const beMonth = perMonth > 0 ? Math.max(1, Math.ceil(s.total / perMonth - 1e-9)) : Infinity;
+  const profitTerm = perMonth * s.term;
+  const net = profitTerm - s.total;
+  const roi = s.total > 0 ? profitTerm / s.total : 0;
+  return { ppc, monthly, covered, casesBE, perMonth, beMonth, profitTerm, net, roi };
+}
+
+/* ---------- render ---------- */
+function render(){
+  const c = calc(), P = esc(s.practice || 'Your Practice'), proc = esc(s.proc || 'case');
+  const term = Math.max(1, Math.round(s.term));
+
+  // Slide 1 — what one case is worth
+  $('s1-eye').textContent = `${s.practice || 'Your Practice'} | What one case is worth`;
+  $('s1-head').innerHTML = c.covered >= term
+    ? `One ${proc} pays for the <em>entire</em> ${term}-month program.`
+    : `One ${proc} pays for <em>${num('cov', c.covered, 'mo')} months</em> of content.`;
+  const g = $('s1-grid');
+  const cols = term <= 4 ? term : term <= 6 ? 3 : term <= 12 ? 4 : 6;
+  g.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  if (g.children.length !== term) {
+    g.innerHTML = Array.from({length:term}, (_, i) => `<div class="tile"><div class="fill"></div><div class="lab">M${i+1}</div></div>`).join('');
+  }
+  requestAnimationFrame(() => [...g.children].forEach((t, i) => {
+    t.firstChild.style.width = (Math.max(0, Math.min(1, c.covered - i)) * 100) + '%';
+  }));
+  const rows = Math.ceil(term / cols), tileH = (520 - (cols - 1) * 14) / cols;
+  $('s1-cap').style.top = (210 + rows * tileH + (rows - 1) * 14 + 22) + 'px';
+  const spare = c.ppc - s.total;
+  $('s1-cap').innerHTML = c.covered >= term
+    ? `Every month covered, <b>${num('spare', spare, 'money')} to spare</b>`
+    : `Each square = one month of content`;
+  $('s1-math').innerHTML = `
+    <div><div class="v">${num('fee', s.fee, 'money')}</div><div class="l">Case fee</div></div>
+    <div class="op">×</div>
+    <div><div class="v">${num('mg', s.margin, 'pct')}</div><div class="l">Margin</div></div>
+    <div class="op">=</div>
+    <div class="hi"><div class="v">${num('ppc', c.ppc, 'money')}</div><div class="l">Profit / case</div></div>
+    <div class="op">÷</div>
+    <div><div class="v">${num('mon', c.monthly, 'money')}</div><div class="l">Program / mo</div></div>`;
+
+  // Slide 2 — payback timeline
+  $('s2-eye').textContent = `${s.practice || 'Your Practice'} | Payback timeline`;
+  const cTxt = casesTxt(s.cases), cWord = plural(proc, s.cases);
+  $('s2-head').innerHTML = s.cases <= 0
+    ? `Add one ${proc} a month and watch this fill in.`
+    : c.beMonth <= term
+      ? `At ${cTxt} ${cWord} a month, the program pays for itself by <em>month ${c.beMonth}</em>.`
+      : `At ${cTxt} a month, it takes <em>${c.casesBE} ${plural(proc, c.casesBE)}</em> to break even.`;
+  const bars = $('s2-bars');
+  if (bars.children.length !== term) {
+    bars.innerHTML = Array.from({length:term}, (_, i) => `<div class="bar"><div class="bf"></div><div class="bv"></div><div class="bl">M${i+1}</div></div>`).join('');
+  }
+  const maxY = Math.max(s.total * 1.35, c.profitTerm * 1.1, 1);
+  [...bars.children].forEach((b, i) => {
+    const cum = c.perMonth * (i + 1), h = cum / maxY * 100;
+    b.classList.toggle('over', s.total > 0 && cum >= s.total);
+    b.classList.toggle('be', i + 1 === c.beMonth);
+    b.children[0].style.height = h + '%';
+    b.children[1].style.bottom = `calc(${h}% + 8px)`;
+    b.children[1].textContent = cum > 0 ? moneyK(cum) : '';
+    b.children[1].style.fontSize = term > 12 ? '14px' : '19px';
+  });
+  $('s2-inv').style.bottom = (s.total / maxY * 100) + '%';
+  $('s2-invlab').textContent = moneyK(s.total);
+  $('s2-stats').innerHTML = `
+    <div class="stat"><div class="l">Program investment</div><div class="v">${num('tot2', s.total, 'money')}</div></div>
+    <div class="stat hi"><div class="l">Profit by month ${term}</div><div class="v">${num('pt2', c.profitTerm, 'money')}</div></div>`;
+
+  // Slide 3 — the return
+  $('s3-eye').textContent = `${s.practice || 'Your Practice'} | The return`;
+  $('s3-head').innerHTML = s.cases <= 0
+    ? `Every ${proc} the content brings in changes the math.`
+    : `${cTxt} more ${cWord} a month. <em>Here's the return.</em>`;
+  $('s3-tiles').innerHTML = `
+    <div class="card"><div class="l">Program investment</div><div class="v">${num('tot3', s.total, 'money')}</div><div class="s">${term} months of doctor-led content</div></div>
+    <div class="card"><div class="l">Profit per ${proc}</div><div class="v">${num('ppc3', c.ppc, 'money')}</div><div class="s">${money(s.fee)} fee at ${s.margin}% margin</div></div>
+    <div class="card"><div class="l">Cases to break even</div><div class="v">${isFinite(c.casesBE) ? num('cbe', c.casesBE, 'int') : '—'}</div><div class="s">over the full ${term} months</div></div>
+    <div class="card hi"><div class="l">Net profit · ${term} months</div><div class="v ${c.net < 0 ? 'neg' : ''}">${num('net', c.net, 'money')}</div><div class="s">${money(c.profitTerm)} profit − ${money(s.total)} program</div></div>`;
+  $('s3-roi').innerHTML = `<div class="l">Return on program</div><div class="v">${num('roi', c.roi, 'x')}</div><div class="s">Every $1 in content returns <b style="color:#fff">$${c.roi.toFixed(2)}</b> in profit at ${cTxt} ${cWord} a month.</div>`;
+
+
+  // Slide 4 — scenarios 1..5 extra cases a month
+  $('s4-eye').textContent = `${s.practice || 'Your Practice'} | What if`;
+  const N = [1,2,3,4,5];
+  const prof = n => n * c.ppc * term, roasOf = n => s.total > 0 ? prof(n) / s.total : 0;
+  $('s4-head').innerHTML = `Same program. <em>${FMT.x(roasOf(1))} to ${FMT.x(roasOf(5))}</em> return, depending on a few cases a month.`;
+  const cols4 = $('s4-cols');
+  if (!cols4.children.length) {
+    cols4.innerHTML = N.map(n => `<div class="col"><div class="cf"></div><div class="top"></div><div class="bot"><b>+${n} ${n===1?'case':'cases'}</b><span>per month</span></div></div>`).join('');
+  }
+  const max4 = Math.max(prof(5) * 1.28, s.total * 1.3, 1);
+  [...cols4.children].forEach((el, i) => {
+    const n = N[i], p = prof(n), h = p / max4 * 100;
+    el.classList.toggle('over', p >= s.total && s.total > 0);
+    el.classList.toggle('sel', Math.round(s.cases) === n);
+    el.children[0].style.height = h + '%';
+    el.children[1].style.bottom = `calc(${h}% + 14px)`;
+    el.children[1].innerHTML = `<div class="roasv">${num('r4'+n, roasOf(n), 'x')}</div><div class="netv">${num('n4'+n, p - s.total, 'moneyK')} net</div>`;
+  });
+  $('s4-inv').style.bottom = (s.total / max4 * 100) + '%';
+  $('s4-invlab').textContent = moneyK(s.total);
+  $('s4-side').innerHTML = `
+    <div class="stat"><div class="l">Program · ${term} months</div><div class="v">${num('tot4', s.total, 'money')}</div></div>
+    <div class="stat hi"><div class="l">Profit per ${proc}</div><div class="v">${num('ppc4', c.ppc, 'money')}</div></div>`;
+
+  // slide visibility + tabs
+  ['s1','s2','s3','s4'].forEach((id, i) => $(id).classList.toggle('on', s.slide === i + 1));
+  [...$('tabs').children].forEach(b => b.classList.toggle('on', +b.dataset.s === s.slide));
+  $('corner').classList.toggle('guide', !!s.guide);
+  $('casesOut').textContent = casesTxt(s.cases);
+
+  animateNums($('stage'));
+  save();
+}
+
+/* ---------- logo ---------- */
+function renderLogo(){
+  let src = null; try { src = localStorage.getItem(LOGO); } catch(e){}
+  const mark = h => `<svg height="${h}" viewBox="0 0 199 205" aria-label="1Light" style="display:block"><polygon points="0,40 106,0 106,168 14,205 14,53 0,53" fill="#F8F6F2"/><polygon points="106,168 199,130 199,205 106,205" fill="#F8F6F2"/></svg>`;
+  const img = src ? `<img class="logo-img" src="${src}" alt="Logo">` : null;
+  $('bug').innerHTML = img || mark(56);
+  $('corner').innerHTML = '';
+}
+$('logoFile').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { try { localStorage.setItem(LOGO, r.result); } catch(err){ alert('Logo too large to remember — it will show until you reload.'); $('bug').innerHTML = `<img class="logo-img" src="${r.result}">`;  return; } renderLogo(); };
+  r.readAsDataURL(f);
+});
+$('logoClear').addEventListener('click', () => { try { localStorage.removeItem(LOGO); } catch(e){} renderLogo(); });
+
+/* ---------- inputs ---------- */
+const textFields = ['practice','proc'], numFields = ['fee','margin','total','term','cases'];
+function syncInputs(){
+  textFields.forEach(k => $(k).value = s[k]);
+  numFields.forEach(k => $(k).value = s[k]);
+  $('preset').value = s.preset; $('guide').checked = !!s.guide;
+}
+textFields.forEach(k => $(k).addEventListener('input', e => { s[k] = e.target.value; render(); }));
+numFields.forEach(k => $(k).addEventListener('input', e => {
+  const v = parseFloat(e.target.value); s[k] = isFinite(v) ? Math.max(0, v) : 0;
+  if (k === 'margin') s.margin = Math.min(100, s.margin);
+  if (k === 'term') s.term = Math.max(1, Math.min(24, Math.round(s.term || 1)));
+  if (k === 'total' || k === 'term') { s.preset = 'custom'; $('preset').value = 'custom'; }
+  render();
+}));
+$('preset').addEventListener('change', e => {
+  s.preset = e.target.value;
+  if (PRESETS[s.preset]) { Object.assign(s, PRESETS[s.preset]); $('total').value = s.total; $('term').value = s.term; }
+  render();
+});
+$('guide').addEventListener('change', e => { s.guide = e.target.checked; render(); });
+$('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { s.slide = +b.dataset.s; render(); } });
+$('resetBtn').addEventListener('click', () => { s = Object.assign({}, DEFAULTS); syncInputs(); render(); });
+
+/* ---------- present mode + keys ---------- */
+const togglePresent = force => { $('app').classList.toggle('present', force); fit(); };
+$('presentBtn').addEventListener('click', () => togglePresent(true));
+document.addEventListener('keydown', e => {
+  if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) { if (e.key === 'Escape') document.activeElement.blur(); return; }
+  if (e.key === 'p' || e.key === 'P') togglePresent();
+  else if (e.key === 'Escape') togglePresent(false);
+  else if (['1','2','3','4'].includes(e.key)) { s.slide = +e.key; render(); }
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); s.cases = Math.max(0, Math.min(6, s.cases + (e.key === 'ArrowUp' ? 0.5 : -0.5))); $('cases').value = s.cases; render(); }
+  else if (e.key === 'ArrowRight') { s.slide = s.slide % 4 + 1; render(); }
+  else if (e.key === 'ArrowLeft') { s.slide = (s.slide + 2) % 4 + 1; render(); }
+});
+
+/* ---------- scale stage to fit ---------- */
+function fit(){
+  const v = $('view').getBoundingClientRect();
+  const app = $('app'), obs = app.classList.contains('obs') && !app.classList.contains('present');
+  const pad = (app.classList.contains('present') || obs) ? 0 : 28;
+  const k = obs ? 1 : Math.max(0.1, Math.min((v.width - pad*2) / 1920, (v.height - pad*2) / 1080));
+  $('stage').style.transform = `scale(${k})`;
+  $('wrap').style.width = 1920 * k + 'px'; $('wrap').style.height = 1080 * k + 'px';
+}
+new ResizeObserver(fit).observe($('view'));
+
+const qp = new URLSearchParams(location.search);
+if (qp.has('present')) $('app').classList.add('present');
+if (qp.has('obs')) $('app').classList.add('obs');
+if (qp.get('slide')) s.slide = Math.min(4, Math.max(1, +qp.get('slide') || 1));
+syncInputs(); renderLogo(); render(); fit();
+})();
+</script>
+</body>
+</html>
